@@ -1,0 +1,81 @@
+// A função tem por objetivo automatizar a coleta de dados do Instagram Stories. 
+
+function getStoriesIG (){
+  
+  var idPlanilha = "INSERIR ID DA PLANILHA DO GOOGLE SHEETS"; 
+  var instagramID = "INSERIR ID DO INSTAGRAM";
+  var accessToken = "INSERIR TOKEN DE ACESSO";
+  var activeSheet = SpreadsheetApp.openById(idPlanilha).getSheetByName("NOME DA ABA DA PLANILHA ONDE OS DADOS SERÃO INSERIDOS");
+  
+  
+  var urlRequestStoriesID = "https://graph.facebook.com/v3.3/" + instagramID + "/stories?fields=timestamp%2Cmedia_type%2Cmedia_url&access_token=" + accessToken;
+  var requestStatus = UrlFetchApp.fetch(urlRequestStoriesID,{muteHttpExceptions: true, validateHttpsCertificates: true}).getResponseCode();
+  
+ // Adiciona as metricas fixas de cada Stories (ID, Datetime Postagem, tipo Mídia)
+
+  if (requestStatus == 200) {                                                                   
+    
+    var lastRow =activeSheet.getLastRow();                                                      
+    
+    var response = JSON.parse(UrlFetchApp.fetch(urlRequestStoriesID).getContentText());        
+   
+    for (i = 0; i < response.data.length; i++){                                                
+      
+      lastRow = activeSheet.getLastRow(); 
+      
+      var idsExistentes = activeSheet.getRange(2,1,lastRow).getValues();
+      idsExistentes = [].concat.apply([],idsExistentes);
+      
+      var id = response.data[i]["id"];                                                      
+      
+      if (idsExistentes.indexOf(id) == -1){  
+      
+        activeSheet.getRange(lastRow+1,1).setNumberFormat("@").setValue(response.data[i]["id"]);
+        activeSheet.getRange(lastRow+1,2).setValue(Utilities.formatDate(new Date(response.data[i]["timestamp"]),"GMT-4", "yyyy-MM-dd HH:mm:ss")) ;
+        activeSheet.getRange(lastRow+1,3).setValue(response.data[i]["media_type"]);
+        activeSheet.getRange(lastRow+1,4).setValue(response.data[i]["media_url"]); 
+        var row = lastRow + 1
+        
+      } else {
+        row = idsExistentes.indexOf(id) + 2;
+      }
+      
+      // Busca as metricas variaveis para cada Stories (Reach, Impressions, Exists, Taps_forward, Taps_back, Replies e Datetime da ultima atualização)
+
+      var urlRequestStoriesInsights = "https://graph.facebook.com/v3.3/" + id + "/insights?metric=reach%2C%20impressions%2C%20exits%2C%20taps_forward%2C%20taps_back%2C%20replies&period=lifetime&access_token=" + accessToken;
+      var verificaUrl = UrlFetchApp.fetch(urlRequestStoriesInsights,{muteHttpExceptions: true, validateHttpsCertificates: true}).getResponseCode();
+      
+      if (verificaUrl == 200){
+        
+      var dataInsights = JSON.parse(UrlFetchApp.fetch(urlRequestStoriesInsights).getContentText());
+        
+      dataInsights.data.map(function(item){
+        var value = (item.values[0] ? item.values[0].value : '');
+        var column = null;
+        switch (item.name) {
+          case 'reach':
+            column = 6;
+            break;
+          case 'impressions':
+            column = 7;
+            break;
+          case 'exits':
+            column = 8;
+            break;
+          case 'taps_forward':
+            column = 9;
+            break;
+          case 'taps_back':
+            column = 10;
+            break;
+          case 'replies':
+            column = 11;
+            break;
+        }
+        activeSheet.getRange(row,column).setValue(value)
+        var d = Utilities.formatDate(new Date(), "GMT-4", "yyyy-MM-dd HH:mm:ss")
+        activeSheet.getRange(row,5).setValue(d)})
+      }else{}
+    } 
+  }
+}
